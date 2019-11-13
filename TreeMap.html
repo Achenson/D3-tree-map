@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>FCC | Data Vis 05 - Tree Map</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      #navbar {
+        display: flex;
+        flex-direction: row;
+        width: 400px;
+        background-color: black;
+        color: lightblue;
+        justify-content: space-evenly;
+        font-size: 1.4rem;
+      }
+
+      #games:hover,
+      #movies:hover,
+      #kickstarter:hover {
+        color: blue;
+        cursor: pointer;
+      }
+
+      .svgcolor {
+        background-color: whitesmoke;
+      }
+
+      .parent {
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+      }
+      body {
+        background-color: whitesmoke;
+      }
+
+      #tooltip {
+        position: absolute;
+        text-align: center;
+
+        width: 200px;
+        height: 90px;
+        padding: 10px;
+        font: 0.8rem sans-serif;
+        background-color: white;
+        color: black;
+        border: 1px solid black;
+
+        pointer-events: none;
+      }
+
+      .tile {
+        fill-opacity: 0;
+        stroke: black;
+        stroke-width: 1;
+
+        stroke-opacity: 0.9;
+      }
+
+      .legend {
+        stroke: black;
+      }
+      .legend-text {
+        font-size: 0.7rem;
+      }
+
+      .cell-text {
+        font-size: 0.7rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="parent">
+      <nav id="navbar">
+        <a id="movies">Movies</a>
+        <a id="games">Video games</a>
+        <a id="kickstarter">Kickstarter</a>
+      </nav>
+      <h1 style="text-align: center" id="title">
+        Video Game Sales
+      </h1>
+      <h2 style="text-align: center" id="description">
+        Top 100 Most Sold Video Games Grouped by Platform
+      </h2>
+
+      <div class="chart"></div>
+    </div>
+
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3plus/1.9.8/d3plus.full.js"></script>
+
+    <script>
+      /* 
+
+      App logic:
+        1.making copy of array of companies, but with added total Company Value
+        & companyValue to total Value ration
+      2. sort by value by decreasing order 
+
+        3. ordering each company to different columns [function createColumns]
+        -the company is moved to column two if the total ratio would exceed 0.4;
+        -the company is moved to column three if the total ratio would exceed 0.4;
+        the rest of the companies (if any) are moved
+      
+      4. for each column, 2 inner columns are created
+      - //the game is moved to column two if the total ratio in in current inner column would exceed 0.5;
+
+      5. navbar logic : fetching movies/games/kickstarter
+      
+      */
+
+      const freeCodeCampURl_Games =
+        "https://cdn.freecodecamp.org/testable-projects-fcc/data/tree_map/video-game-sales-data.json";
+
+      fetchDataThreeVersions(freeCodeCampURl_Games);
+
+      function fetchDataThreeVersions(toFetch) {
+        fetch(toFetch)
+          .then(res => res.json())
+          .then(jsonData => {
+            let toString = JSON.stringify(jsonData, null, 2);
+            // console.log("TCL: toString", toString);
+
+            /* jsonData structure:
+        {
+        "name": "Video Game Sales Data Top 100",
+        "children": [
+          {
+            "name": "2600", //platform
+            "children": [ //games belonging to a platform
+              {
+                "name": "Pac-Man",
+                "category": "2600",
+                "value": "7.81"
+              }
+            ]
+          },
+          {...
+                          */
+
+            // array of companies, total values of company games added
+            let allCompaniesValArray = [];
+
+            for (let el of jsonData.children) {
+              //the sum of all companies children (games)
+              let companyVal = 0;
+
+              for (let el2 of el.children) {
+                let value = parseFloat(el2.value);
+
+                companyVal += value;
+              }
+
+              let companyValObj = {
+                name: el.name,
+                companyVal: companyVal,
+                children: []
+                //toTotalRatio value will be added here
+              };
+
+              for (let el2 of el.children) {
+                companyValObj.children.push(el2);
+              }
+
+              allCompaniesValArray.push(companyValObj);
+            }
+
+            //calculating total value of all the companies
+            let totalCompaniesVal = 0;
+
+            for (let el of allCompaniesValArray) {
+              totalCompaniesVal += el.companyVal;
+            }
+
+            console.log(totalCompaniesVal);
+            //1458.8799999999999
+
+            //adding value/total value ratio to each company
+            for (let el of allCompaniesValArray) {
+              el.toTotalRatio = el.companyVal / totalCompaniesVal;
+            }
+
+            allCompaniesValArray.sort((a, b) => {
+              if (a.companyVal < b.companyVal) {
+                return 1;
+              }
+              if (a.companyVal > b.companyVal) {
+                return -1;
+              }
+
+              return 0;
+            });
+
+            /*
+      allCompaniesValArray structure
+      (18) [{…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}, {…}]
+      0: {name: "Wii", companyVal: 328.45, toTotalRatio: 0.22513846238210136}
+     ...
+      17: {name: "XOne", companyVal: 7.39, toTotalratio: 0.005065529721430139, children:[
+        {name: "Gran Turismo", category: "PS", value: "10.95"},
+        {name: "Gran Turismo", category: "PS", value: "10.95"}.
+      ]}
+      */
+
+            //ordering each company to different columns
+
+            let columnOne = {
+              columnNr: 1,
+              arrayOfCompanies: [],
+              //the company is moved to column two if the total ratio in this column would exceed 0.4;
+              totalRatio: 0
+            };
+
+            let columnTwo = {
+              columnNr: 2,
+              arrayOfCompanies: [],
+              //the company is moved to column three if the total ratio n this column would exceed 0.4;
+              totalRatio: 0
+            };
+
+            let columnThree = {
+              columnNr: 3,
+              arrayOfCompanies: [],
+              totalRatio: 0
+            };
+
+            let allCompaniesModified = [...allCompaniesValArray];
+            console.log("TCL: allCompaniesValArray", allCompaniesValArray);
+            console.log("TCL: allCompaniesModified", allCompaniesModified);
+
+            for (let i = 0; i < allCompaniesValArray.length; i++) {
+              if (i === 0) {
+                columnOne.arrayOfCompanies.push(allCompaniesValArray[i]);
+                columnOne.totalRatio += allCompaniesValArray[i].toTotalRatio;
+                allCompaniesModified.shift();
+                continue;
+              }
+
+              if (
+                columnOne.totalRatio + allCompaniesValArray[i].toTotalRatio <=
+                0.4
+              ) {
+                columnOne.arrayOfCompanies.push(allCompaniesValArray[i]);
+                columnOne.totalRatio += allCompaniesValArray[i].toTotalRatio;
+                allCompaniesModified.shift();
+              } else {
+                break;
+              }
+            }
+
+            console.log("TCL: allCompaniesModified", allCompaniesModified);
+            let allCompaniesModified_2 = [...allCompaniesModified];
+
+            for (let i = 0; i < allCompaniesModified.length; i++) {
+              if (columnOne.totalRatio === 1) {
+                break;
+              }
+
+              if (
+                columnTwo.totalRatio + allCompaniesModified[i].toTotalRatio <=
+                0.4
+              ) {
+                columnTwo.arrayOfCompanies.push(allCompaniesModified[i]);
+                columnTwo.totalRatio += allCompaniesModified[i].toTotalRatio;
+                allCompaniesModified_2.shift();
+              } else {
+                break;
+              }
+            }
+
+            console.log("TCL: allCompaniesModified_2", allCompaniesModified_2);
+
+            let allCompaniesModified_3 = [...allCompaniesModified_2];
+
+            for (let el of allCompaniesModified_2) {
+              //there will be only two columns if the first company val + second company val takes all the data
+              if (columnOne.totalRatio + columnTwo.totalRatio === 1) {
+                break;
+              }
+
+              columnThree.arrayOfCompanies.push(el);
+              allCompaniesModified_3.shift();
+            }
+
+            columnThree.totalRatio =
+              1 - columnOne.totalRatio - columnTwo.totalRatio;
+
+            console.log("column one");
+            console.log(columnOne.arrayOfCompanies);
+            console.log(columnOne.totalRatio);
+            console.log("column two");
+            console.log(columnTwo.arrayOfCompanies);
+            console.log(columnTwo.totalRatio);
+            console.log("column three");
+            console.log(columnThree.arrayOfCompanies);
+            console.log(columnThree.totalRatio);
+
+            const margin = { top: 0, right: 0, bottom: 100, left: 0 };
+            //height & weight of bar chart itself,
+            // height & weight of svg will include this margins
+            const w = 1300 - margin.left - margin.right;
+            const h = 800 - margin.top - margin.bottom;
+
+            //adding svg
+            const svg = d3
+              .select(".chart")
+              .append("svg")
+              .attr("width", w + margin.left + margin.right)
+              .attr("height", h + margin.top + margin.bottom)
+              .attr("class", "svgcolor");
+
+            //advanced tooltip
+
+            const proTooltip = d3
+              .select("body")
+              .append("div")
+              .attr("id", "tooltip")
+              .style("opacity", 0);
+
+            // adding bars
+
+            let colors = [
+              "dodgerblue",
+              "orange",
+              "red",
+              "green",
+              "yellow",
+              "LightSteelBlue",
+              "firebrick",
+              "orangered",
+              "violet",
+              "pink",
+              "DarkSeaGreen ",
+              "GoldenRod",
+              "coral",
+              "DarkTurquoise",
+              "GreenYellow ",
+              "Gray",
+              "MistyRose",
+              "Gold",
+              "Yellowgreen"
+            ];
+
+            //for calculating x attribute for the columns
+            //this will be modified after createColumns function run
+            //so it can change the 'x' position when column starts
+            let widthUsed = 0;
+
+            createColumns(columnOne);
+            createColumns(columnTwo);
+            createColumns(columnThree);
+
+            function createColumns(column) {
+              const gElement = svg.append("g").attr(
+                "transform",
+                //"translate(" + margin.left + "," + margin.top + ")"
+                `translate(${margin.left},${margin.top})`
+              );
+
+              if (column.totalRatio === 0) {
+                console.log(`${column} is empty`);
+                return false;
+              }
+
+              let arrOfCompanies = column.arrayOfCompanies;
+
+              let columnArea = column.totalRatio * w * h;
+              console.log("TCL: columnArea", columnArea);
+
+              //h is the same as h for the whole svg
+              //area = h * w
+
+              let columnWidth = columnArea / h;
+
+              //for calculating y attribute for the column
+              let heightUsed = 0;
+
+              //for the rect area: width is the same as columnWidth, height is calculated:
+              //rectHeight = rectArea()/columnWidth
+
+              gElement
+                .selectAll("rect")
+                .data(arrOfCompanies)
+                .enter()
+                .append("rect")
+                .attr("x", widthUsed)
+                .attr("y", (d, i) => {
+                  if (i < 1) {
+                    return 0;
+                  } else {
+                    heightUsed +=
+                      //rectHeight = rectArea()/columnWidth
+                      (arrOfCompanies[i - 1].toTotalRatio * h * w) /
+                      columnWidth;
+
+                    return heightUsed;
+                  }
+                })
+
+                .attr("width", columnWidth)
+                .attr("height", d => {
+                  return (d.toTotalRatio * h * w) / columnWidth;
+                })
+                //colors
+                .attr("fill", (d, i) => {
+                  if (column.columnNr === 1) {
+                    return colors[i];
+                  }
+
+                  if (column.columnNr === 2) {
+                    return colors[i + columnOne.arrayOfCompanies.length];
+                  }
+
+                  if (column.columnNr === 3) {
+                    return colors[
+                      i +
+                        columnOne.arrayOfCompanies.length +
+                        columnTwo.arrayOfCompanies.length
+                    ];
+                  }
+                })
+                .attr("class", "company");
+
+              const dataToLoop = d3.selectAll(".company");
+
+              //each column rect is going to get data (d below) from one el of dataset array =
+              dataToLoop.each(function(d, i, arr) {
+                let t = d3.select(this);
+
+                console.log(t.attr("height"));
+                console.log(d.children);
+                //nesting rect within rects not possible!!
+                console.log("children length");
+                console.log(d.children.length);
+
+                /// inner columns logic
+
+                let innerColOne = {
+                  columnNr: 1,
+                  arrayOfGames: [],
+                  //the game is moved to column two if the total ratio in this columnwould exceed 0.5;
+                  innerRatio: 0
+                };
+
+                let innerColTwo = {
+                  columnNr: 2,
+                  arrayOfGames: [],
+                  innerRatio: 0
+                };
+
+                let allGamesModified = [...d.children];
+
+                for (let i = 0; i < d.children.length; i++) {
+                  if (i === 0) {
+                    innerColOne.arrayOfGames.push(d.children[i]);
+                    innerColOne.innerRatio +=
+                      d.children[i].value / d.companyVal;
+                    allGamesModified.shift();
+                    continue;
+                  }
+
+                  if (
+                    ///if after adding this game, the total ratio would still be
+                    //smaller than 0.5
+                    //d.children[i].value/d.companyVal  <-  game/company ratio
+                    innerColOne.innerRatio +
+                      d.children[i].value / d.companyVal <=
+                    0.5
+                  ) {
+                    innerColOne.arrayOfGames.push(d.children[i]);
+                    innerColOne.innerRatio +=
+                      d.children[i].value / d.companyVal;
+                    allGamesModified.shift();
+                  } else {
+                    break;
+                  }
+                }
+
+                let allGamesModified_2 = [...allGamesModified];
+
+                for (let el of allGamesModified) {
+                  //ther will be no column two if there is only one game per company
+                  if (columnOne.innerRatio === 1) {
+                    break;
+                  }
+
+                  innerColTwo.arrayOfGames.push(el);
+                  innerColTwo.innerRatio += el.value / d.companyVal;
+                  allCompaniesModified_2.shift();
+                }
+
+                console.log("innerColumn one");
+                console.log(innerColOne.arrayOfGames);
+                console.log(innerColOne.innerRatio);
+                console.log("innerColumn two");
+                console.log(innerColTwo.arrayOfGames);
+                console.log(innerColTwo.innerRatio);
+
+                //for calculating x attribute for the innner columns
+                //d -> current data from the loop!
+                let currentCompany = d;
+                console.log(
+                  "TCL: createColumns -> currentCompany",
+                  currentCompany
+                );
+
+                // t -> this company's rect
+                let innerWidthUsed = parseInt(t.attr("x"));
+
+                createInnerCol(innerColOne);
+                createInnerCol(innerColTwo);
+
+                function createInnerCol(column) {
+                  const gElement2 = svg.append("g").attr(
+                    "transform",
+                    // "translate(" + margin.left + "," + margin.top + ")"
+                    `translate(${margin.left},${margin.top})`
+                  );
+                  if (column.innerRatio === 0) {
+                    //console.log(`${column} is empty`);
+                    return false;
+                  }
+
+                  let arrOfGames = column.arrayOfGames;
+
+                  // column inside outer rect
+                  let innerColArea =
+                    column.innerRatio * t.attr("height") * t.attr("width");
+                  // width = innerColumnArea/ outer Rect height
+                  let innerColWidth = innerColArea / t.attr("height");
+
+                  let heightUsed = parseInt(t.attr("y"));
+
+                  for (let k = 0; k < arrOfGames.length; k++) {
+                    let cellHeight =
+                      ((arrOfGames[k].value / currentCompany.companyVal) *
+                        t.attr("height") *
+                        t.attr("width")) /
+                      innerColWidth;
+
+                    let myRect = gElement2
+                      //.selectAll("rect")
+                      //.enter()
+                      .append("rect")
+                      .attr("x", innerWidthUsed)
+                      .attr("y", d => {
+                        if (k < 1) {
+                          return t.attr("y");
+                        } else {
+                          //game to company ratio !!
+                          heightUsed +=
+                            ((arrOfGames[k - 1].value /
+                              currentCompany.companyVal) *
+                              t.attr("height") *
+                              t.attr("width")) /
+                            innerColWidth;
+
+                          return heightUsed;
+                        }
+                      })
+                      .attr("width", innerColWidth)
+                      .attr("height", d => cellHeight)
+                      .attr("fill", d => {
+                        return "white";
+                      })
+                      .attr("class", "tile")
+
+                      .on("mouseover", function(d, i) {
+                        let thisRect = d3.select(this);
+                        let thisSvg = d3.select("svg");
+                        let thisBody = d3.select("body");
+
+                        proTooltip
+                          .transition()
+                          .duration(0)
+                          .style("opacity", 0.9);
+                        proTooltip
+                          .html(
+                            `Name: ${arrOfGames[k].name}` +
+                              "<br/>" +
+                              `Category: ${arrOfGames[k].category}` +
+                              "<br/>" +
+                              `Value: ${arrOfGames[k].value}`
+                          )
+                          //tooltip showing depending on mouse entering position, doesn't look good
+                          //.style("left", d3.event.pageX + 50+ "px")
+                          //.style("top", d3.event.pageY  parseInt(thisRect.attr('height'))
+                          //- 50+"px");
+
+                          //tooltip showing based on .cell position
+                          .style(
+                            "left",
+                            parseInt(thisRect.attr("x")) +
+                              272 +
+                              parseInt(thisRect.attr("width")) / 10 +
+                              "px"
+                          )
+                          .style(
+                            "top",
+                            parseInt(thisRect.attr("y")) +
+                              170 +
+                              parseInt(thisRect.attr("height")) / 5 +
+                              "px"
+                          );
+                      })
+                      .on("mouseout", function(d) {
+                        proTooltip
+                          .transition()
+                          .duration(300)
+                          .style("opacity", 0);
+                      });
+
+                    let myText = gElement2
+                      //.selectAll("rect")
+                      //.enter()
+                      .append("text")
+                      .attr("x", innerWidthUsed)
+                      .attr("y", d => {
+                        if (k < 1) {
+                          return parseInt(t.attr("y")) + 10; //+ parseInt(cellHeight) / 2;
+                        } else {
+                          return parseInt(heightUsed) + 10; //+ parseInt(cellHeight) / 2;
+                        }
+                      })
+                      .text(`${arrOfGames[k].name}`)
+                      .attr("class", "cell-text")
+                      .attr("dy", "0.05rem")
+                      .attr("dx", "0.1rem");
+
+                    //!! cutting the text and adding "..."  at the end of the line
+                    myText.call(crop, myRect);
+
+                    function crop(myText, myRect) {
+                      let rectLength = myRect.node().getBBox().width;
+                      console.log("TCL: crop -> rectLength", rectLength);
+
+                      console.log(
+                        "TCL: crop -> myText.node().getComputedTextLength()",
+                        myText.node().getComputedTextLength()
+                      );
+                      myText.node().getComputedTextLength();
+
+                      let bbox = myText.node().getBBox();
+                      console.log("bbox", bbox.width);
+
+                      while (myText.node().getBBox().width > rectLength - 5) {
+                        myText.text(myText.text().slice(0, -4) + "...");
+                      }
+                    }
+                  }
+
+                  innerWidthUsed += innerColWidth;
+                }
+              });
+
+              widthUsed += columnWidth;
+            }
+
+            const gElement3 = svg
+              .append("g")
+              .attr(
+                "transform",
+                //"translate(" + margin.left + "," + margin.top + ")"
+                `translate(${margin.left},${margin.top})`
+              )
+              .attr("id", "legend");
+
+            gElement3
+              .selectAll("rect")
+              //.data(jsonData.children)
+              .data(allCompaniesValArray)
+              .enter()
+              .append("rect")
+              .attr("y", h + 35)
+              .attr("x", (d, i) => 5 + i * 70)
+              .attr("height", 25)
+              .attr("width", 35)
+              .attr("fill", (d, i) => colors[i])
+              .attr("class", "legend");
+
+            gElement3
+              .selectAll("text")
+              //.data(jsonData.children)
+              .data(allCompaniesValArray)
+              .enter()
+              .append("text")
+              .attr("y", h + 70)
+              .attr("x", (d, i) => 5 + i * 70)
+              .text((d, i) => {
+                return d.name;
+              })
+              .attr("class", "legend-text")
+              .each(function() {
+                d3plus
+                  .textwrap()
+                  .container(d3.select(this))
+                  .shape("square")
+                  //.align('middle')
+                  //.valign('middle')
+                  // .width(parseInt(innerColWidth)/10)
+                  .width(60)
+                  .height(28)
+                  //.valign('middle')
+                  .padding(1)
+                  //.resize(true)
+                  .draw();
+              });
+          });
+      }
+
+      // navbar logic - fetching data
+
+      let gamesNav = document.getElementById("games");
+      let moviesNav = document.getElementById("movies");
+      let kickstarterNav = document.getElementById("kickstarter");
+
+      const fetchData = {
+        games: {
+          Title: "Video Game Sales",
+          Description: "Top 100 Most Sold Video Games Grouped by Platform",
+          Url:
+            "https://cdn.rawgit.com/freeCodeCamp/testable-projects-fcc/a80ce8f9/src/data/tree_map/video-game-sales-data.json"
+        },
+        movies: {
+          Title: "Movie Sales",
+          Description: "Top 100 Highest Grossing Movies Grouped By Genre",
+          Url:
+            "https://cdn.rawgit.com/freeCodeCamp/testable-projects-fcc/a80ce8f9/src/data/tree_map/movie-data.json"
+        },
+        kickstarter: {
+          Title: "Kickstarter Pledges",
+          Description:
+            "Top 100 Most Pledged Kickstarter Campaigns Grouped By Category",
+          Url:
+            "https://cdn.rawgit.com/freeCodeCamp/testable-projects-fcc/a80ce8f9/src/data/tree_map/kickstarter-funding-data.json"
+        }
+      };
+
+      let chartDiv = document.querySelector(".chart");
+
+      let myTitle = document.getElementById("title");
+      let myDescrition = document.getElementById("description");
+
+      let myGames = "games";
+      let myMovies = "movies";
+      let myKickstarter = "kickstarter";
+
+      moviesNav.onclick = () => {
+        return renderData(myMovies);
+      };
+      gamesNav.onclick = () => {
+        renderData(myGames);
+      };
+      kickstarterNav.onclick = () => {
+        renderData(myKickstarter);
+      };
+
+      function renderData(medium) {
+        while (chartDiv.firstChild) chartDiv.removeChild(chartDiv.firstChild);
+
+        fetchDataThreeVersions(fetchData[medium].Url);
+
+        myTitle.innerHTML = fetchData[medium].Title;
+        myDescrition.innerHTML = fetchData[medium].Description;
+      }
+    </script>
+  </body>
+</html>
